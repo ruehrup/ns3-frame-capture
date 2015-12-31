@@ -1,0 +1,21 @@
+--- model/wifi-phy-state-helper.cc	2012-12-22 00:56:44.000000000 +0100
++++ wifi-phy-state-helper.cc	2015-12-31 16:03:51.000000000 +0100
+@@ -16,6 +16,8 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
++ *
++ * Packet capture: Copyright (c) 2015 FTW, Author: Stefan Ruehrup <ruehrup@ftw.at>
+  */
+ #include "wifi-phy-state-helper.h"
+ #include "ns3/log.h"
+@@ -398,6 +400,9 @@
+   m_stateLogger (m_startRx, now - m_startRx, WifiPhy::RX);
+   m_previousStateChangeTime = now;
+   m_rxing = false;
++  #ifndef DISABLE_PACKET_CAPTURE  
++  m_endRx = now;
++  #endif
+ 
+   NS_ASSERT (IsStateIdle () || IsStateCcaBusy ());
+ }

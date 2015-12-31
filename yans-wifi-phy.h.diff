@@ -1,0 +1,45 @@
+--- model/yans-wifi-phy.h	2012-12-22 00:56:44.000000000 +0100
++++ yans-wifi-phy.h	2015-12-31 16:05:27.000000000 +0100
+@@ -16,6 +16,8 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
++ *
++ * Packet capture: Copyright (c) 2015 FTW, Author: Stefan Ruehrup <ruehrup@ftw.at>
+  */
+ 
+ #ifndef YANS_WIFI_PHY_H
+@@ -35,6 +37,7 @@
+ #include "wifi-preamble.h"
+ #include "wifi-phy-standard.h"
+ #include "interference-helper.h"
++#include "ns3/boolean.h" 
+ 
+ 
+ namespace ns3 {
+@@ -114,8 +117,11 @@
+   Ptr<Object> GetDevice (void) const;
+   Ptr<Object> GetMobility (void);
+ 
+-
+-
++  #ifndef DISABLE_PACKET_CAPTURE
++  void SetPacketCaptureThreshold (double sir);
++  double GetPacketCaptureThreshold (void) const;
++  bool m_enablePacketCapture;
++  #endif
+ 
+   virtual double GetTxPowerStart (void) const;
+   virtual double GetTxPowerEnd (void) const;
+@@ -177,6 +183,11 @@
+   double   m_txPowerEndDbm;
+   uint32_t m_nTxPower;
+ 
++#ifndef DISABLE_PACKET_CAPTURE
++  double m_packetCaptureThreshold;
++  Ptr<Packet> m_currentRxPacket;
++#endif
++
+   Ptr<YansWifiChannel> m_channel;
+   uint16_t m_channelNumber;
+   Ptr<Object> m_device;

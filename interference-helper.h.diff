@@ -1,0 +1,31 @@
+--- model/interference-helper.h	2012-12-22 00:56:44.000000000 +0100
++++ interference-helper.h	2015-12-31 16:09:34.000000000 +0100
+@@ -16,6 +16,8 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
++ *
++ * Packet capture: Copyright (c) 2015 FTW, Author: Stefan Ruehrup <ruehrup@ftw.at>
+  */
+ #ifndef INTERFERENCE_HELPER_H
+ #define INTERFERENCE_HELPER_H
+@@ -29,6 +31,8 @@
+ #include "ns3/nstime.h"
+ #include "ns3/simple-ref-count.h"
+ 
++
++
+ namespace ns3 {
+ 
+ class ErrorRateModel;
+@@ -87,6 +91,10 @@
+    */
+   Time GetEnergyDuration (double energyW);
+ 
++  #ifndef DISABLE_PACKET_CAPTURE 
++  double GetPowerW (Time t);
++  #endif
++
+ 
+   Ptr<InterferenceHelper::Event> Add (uint32_t size, WifiMode payloadMode,
+                                       enum WifiPreamble preamble,

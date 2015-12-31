@@ -1,0 +1,159 @@
+--- model/yans-wifi-phy.cc	2012-12-22 00:56:44.000000000 +0100
++++ yans-wifi-phy.cc	2015-12-31 16:12:12.000000000 +0100
+@@ -16,6 +16,8 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
++ *
++ * Packet capture: Copyright (c) 2015 FTW, Author: Stefan Ruehrup <ruehrup@ftw.at>
+  */
+ 
+ #include "yans-wifi-phy.h"
+@@ -36,6 +38,7 @@
+ #include "ns3/trace-source-accessor.h"
+ #include <cmath>
+ 
++
+ NS_LOG_COMPONENT_DEFINE ("YansWifiPhy");
+ 
+ namespace ns3 {
+@@ -119,7 +122,19 @@
+                    MakeUintegerAccessor (&YansWifiPhy::SetChannelNumber,
+                                          &YansWifiPhy::GetChannelNumber),
+                    MakeUintegerChecker<uint16_t> ())
+-
++#ifndef DISABLE_PACKET_CAPTURE
++    .AddAttribute ( "enablePacketCapture",
++                    "enable packet capture (default=false)",
++                    BooleanValue (false),
++                    MakeBooleanAccessor (&YansWifiPhy::m_enablePacketCapture),
++                    MakeBooleanChecker () )
++    .AddAttribute ("PacketCaptureThreshold",
++                   "Minimum necessary power increase for rx restart (linear, not in dB!).",
++                   DoubleValue (10.0),
++                   MakeDoubleAccessor (&YansWifiPhy::SetPacketCaptureThreshold,
++                                       &YansWifiPhy::GetPacketCaptureThreshold),
++                   MakeDoubleChecker<double> ())
++#endif
+   ;
+   return tid;
+ }
+@@ -277,6 +292,20 @@
+   return m_rxGainDb;
+ }
+ 
++#ifndef DISABLE_PACKET_CAPTURE
++double
++YansWifiPhy::GetPacketCaptureThreshold (void) const
++{
++  return m_packetCaptureThreshold;
++}
++
++void
++YansWifiPhy::SetPacketCaptureThreshold (double sir)
++{
++  m_packetCaptureThreshold = sir;
++}
++#endif
++
+ double
+ YansWifiPhy::GetEdThreshold (void) const
+ {
+@@ -400,7 +429,6 @@
+                                  WifiMode txMode,
+                                  enum WifiPreamble preamble)
+ {
+-  NS_LOG_FUNCTION (this << packet << rxPowerDbm << txMode << preamble);
+   rxPowerDbm += m_rxGainDb;
+   double rxPowerW = DbmToW (rxPowerDbm);
+   Time rxDuration = CalculateTxDuration (packet->GetSize (), txMode, preamble);
+@@ -412,6 +440,9 @@
+                               preamble,
+                               rxDuration,
+                               rxPowerW);
++#ifndef DISABLE_PACKET_CAPTURE
++  double interferencePowerW;
++#endif
+ 
+   switch (m_state->GetState ())
+     {
+@@ -434,6 +465,40 @@
+         }
+       break;
+     case YansWifiPhy::RX:
++      #ifndef DISABLE_PACKET_CAPTURE
++      interferencePowerW = m_interference.GetPowerW(Simulator::Now());
++      
++      NS_LOG_DEBUG ("comparing rx power of new frame (power=" << rxPowerW
++                 << "W) and current rx (power=" << interferencePowerW
++                 << "W), ratio=" << rxPowerW / interferencePowerW
++                 << ", threshold=" << m_packetCaptureThreshold
++                 << ", interferencePowerW=" << interferencePowerW);
++            
++      // if the new frame is stronger than current rx:
++      if ( m_enablePacketCapture &&
++          ((interferencePowerW == 0) || (rxPowerW / interferencePowerW > m_packetCaptureThreshold))) {
++          NS_LOG_DEBUG ("performing rx restart (event=" << event << ")");
++
++          // cancel current frame (cf. "SendPacket" below)
++          m_endRxEvent.Cancel ();
++          
++          // abort Rx and notify error (cf. "EndReceive" below)
++          NotifyRxDrop (m_currentRxPacket);
++          m_state->SwitchFromRxEndError (m_currentRxPacket, rxPowerW / interferencePowerW);
++
++          // sync to new frame (cf. case "IDLE" below)
++          m_state->SwitchToRx (rxDuration);
++          NS_ASSERT (m_endRxEvent.IsExpired ());
++          NotifyRxBegin (packet);
++          m_interference.NotifyRxStart ();
++          m_endRxEvent = Simulator::Schedule (rxDuration, &YansWifiPhy::EndReceive, this,
++                                              packet,
++                                              event);
++          m_currentRxPacket = packet;
++      }
++      else // continue as usual ...
++      {
++      #endif
+       NS_LOG_DEBUG ("drop packet because already in Rx (power=" <<
+                     rxPowerW << "W)");
+       NotifyRxDrop (packet);
+@@ -443,6 +508,9 @@
+           // currently-received packet.
+           goto maybeCcaBusy;
+         }
++      #ifndef DISABLE_PACKET_CAPTURE
++      }
++      #endif
+       break;
+     case YansWifiPhy::TX:
+       NS_LOG_DEBUG ("drop packet because already in Tx (power=" <<
+@@ -769,16 +837,13 @@
+ void
+ YansWifiPhy::EndReceive (Ptr<Packet> packet, Ptr<InterferenceHelper::Event> event)
+ {
+-  NS_LOG_FUNCTION (this << packet << event);
+   NS_ASSERT (IsStateRx ());
+   NS_ASSERT (event->GetEndTime () == Simulator::Now ());
+ 
+   struct InterferenceHelper::SnrPer snrPer;
+   snrPer = m_interference.CalculateSnrPer (event);
+-  m_interference.NotifyRxEnd ();
+-
+-  NS_LOG_DEBUG ("mode=" << (event->GetPayloadMode ().GetDataRate ()) <<
+-                ", snr=" << snrPer.snr << ", per=" << snrPer.per << ", size=" << packet->GetSize ());
++  m_interference.NotifyRxEnd (); 
++  
+   if (m_random->GetValue () > snrPer.per)
+     {
+       NotifyRxEnd (packet);
+@@ -795,6 +860,9 @@
+       NotifyRxDrop (packet);
+       m_state->SwitchFromRxEndError (packet, snrPer.snr);
+     }
++  #ifndef DISABLE_PACKET_CAPTURE
++  m_currentRxPacket = NULL;
++  #endif
+ }
+ 
+ int64_t

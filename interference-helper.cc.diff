@@ -1,0 +1,114 @@
+--- model/interference-helper.cc	2012-12-22 00:56:44.000000000 +0100
++++ interference-helper.cc	2015-12-31 16:10:29.000000000 +0100
+@@ -16,6 +16,8 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  *
+  * Author: Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
++ *
++ * Packet capture: Copyright (c) 2015 FTW, Author: Stefan Ruehrup <ruehrup@ftw.at>
+  */
+ #include "interference-helper.h"
+ #include "wifi-phy.h"
+@@ -24,6 +26,7 @@
+ #include "ns3/log.h"
+ #include <algorithm>
+ 
++
+ NS_LOG_COMPONENT_DEFINE ("InterferenceHelper");
+ 
+ namespace ns3 {
+@@ -166,6 +169,21 @@
+   return m_errorRateModel;
+ }
+ 
++#ifndef DISABLE_PACKET_CAPTURE
++double
++InterferenceHelper::GetPowerW (Time t)
++{
++  double noiseInterferenceW = 0.0;
++  noiseInterferenceW = m_firstPower;
++  for (NiChanges::const_iterator i = m_niChanges.begin (); i != m_niChanges.end (); i++)
++    {
++      noiseInterferenceW += i->GetDelta ();
++      if (t > i->GetTime()) return noiseInterferenceW;
++    }
++  return noiseInterferenceW; 
++}
++#endif
++
+ Time
+ InterferenceHelper::GetEnergyDuration (double energyW)
+ {
+@@ -208,7 +226,6 @@
+       AddNiChangeEvent (NiChange (event->GetStartTime (), event->GetRxPowerW ()));
+     }
+   AddNiChangeEvent (NiChange (event->GetEndTime (), -event->GetRxPowerW ()));
+-
+ }
+ 
+ 
+@@ -231,6 +248,43 @@
+ {
+   double noiseInterference = m_firstPower;
+   NS_ASSERT (m_rxing);
++
++#ifndef DISABLE_PACKET_CAPTURE
++
++  NS_LOG_DEBUG("    Copying ni changes");
++
++  for (NiChanges::const_iterator i = m_niChanges.begin (); i != m_niChanges.end (); i++)
++    {
++      NS_LOG_DEBUG("      time=" << i->GetTime () << " delta=" << i->GetDelta ());
++      
++      if (i->GetTime () > event->GetEndTime ()) {
++        NS_LOG_DEBUG("      ... not copied.");
++        break;
++      }
++      
++      double delta = i->GetDelta();
++      if ( ( (event->GetStartTime () == i->GetTime ()) && (event->GetRxPowerW () == i->GetDelta ()) )
++         || ( (event->GetEndTime () == i->GetTime ()) && (event->GetRxPowerW () == -i->GetDelta ()) ) )
++      {
++        delta = 0;
++      }
++      if (i == m_niChanges.begin ())
++      {
++        delta += m_firstPower;
++      }
++      
++      if (i->GetTime () < event->GetStartTime ()) {
++        noiseInterference += i->GetDelta ();
++      }
++      
++      ni->push_back ( NiChange (i->GetTime(), delta) );
++      NS_LOG_DEBUG("      ... copied. new delta=" << delta );
++    }
++    
++  NS_LOG_DEBUG("event=" << event << " startTime=" << event->GetStartTime ()
++            << " m_firstPower=" << m_firstPower
++            << " -- noiseInterference=" << noiseInterference);
++#else
+   for (NiChanges::const_iterator i = m_niChanges.begin () + 1; i != m_niChanges.end (); i++)
+     {
+       if ((event->GetEndTime () == i->GetTime ()) && event->GetRxPowerW () == -i->GetDelta ())
+@@ -241,6 +295,8 @@
+     }
+   ni->insert (ni->begin (), NiChange (event->GetStartTime (), noiseInterference));
+   ni->push_back (NiChange (event->GetEndTime (), 0));
++#endif
++
+   return noiseInterference;
+ }
+ 
+@@ -266,7 +322,11 @@
+   WifiMode payloadMode = event->GetPayloadMode ();
+   WifiPreamble preamble = event->GetPreambleType ();
+   WifiMode headerMode = WifiPhy::GetPlcpHeaderMode (payloadMode, preamble);
++#ifndef DISABLE_PACKET_CAPTURE
++  Time plcpHeaderStart = event->GetStartTime () + MicroSeconds (WifiPhy::GetPlcpPreambleDurationMicroSeconds (payloadMode, preamble));
++#else
+   Time plcpHeaderStart = (*j).GetTime () + MicroSeconds (WifiPhy::GetPlcpPreambleDurationMicroSeconds (payloadMode, preamble));
++#endif
+   Time plcpPayloadStart = plcpHeaderStart + MicroSeconds (WifiPhy::GetPlcpHeaderDurationMicroSeconds (payloadMode, preamble));
+   double noiseInterferenceW = (*j).GetDelta ();
+   double powerW = event->GetRxPowerW ();
