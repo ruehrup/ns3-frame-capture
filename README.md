@@ -5,6 +5,20 @@ This repository includes patches to the network simulator ns-3 in order to suppo
 The experimental investigations preceding this code adaption are explained in: **Paul Fuxjaeger, Stefan Ruehrup: Validation of the NS-3 Interference Model for IEEE802.11 Networks. 8th IFIP Wireless and Mobile Networking Conference (WMNC 2015), October 2015**. 
 Please cite this publication when using the patch in your project.
 
+### Patching ns-3.16
+The patches can be applied by `patch < DIFF-FILE` to the following files in src/wifi/model of the ns-3.16 repository:
+* interference-helper.cc
+* interference-helper.h
+* wifi-phy-state-helper.cc
+* yans-wifi-phy.cc
+* yans-wifi-phy.h
+
+### Using frame capture in simulations
+In order to activate frame capture, the following parameters have to be set:
+* --ns3::YansWifiPhy::enablePacketCapture=1 
+* --ns3::YansWifiPhy::PacketCaptureSIR=8
+The first parameter enables packet capture, the second sets the minimum ratio, where capture (reception of a higher power frame) is possible while being in receive mode. Note that the ratio is linear.
+
 ### Acknowledgement
 The Austrian Competence Center “FTW Forschungszentrum Telekommunikation Wien GmbH” is funded within the program COMET – Competence Centers for Excellent Technologies by BMVIT, BMWFJ, and the City of Vienna. The COMET program is managed by the FFG.
 
